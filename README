@@ -1,221 +1,141 @@
-Markup::Tree(3)       User Contributed Perl Documentation      Markup::Tree(3)
+SYNOPSIS
+        use Markup::TreeNode;
+        my $new_node = Markup::TreeNode->new(tagname => 'p');
 
+DESCRIPTION
+    This module exists pretty much soley for Markup::Tree. I'm sure you can
+    find plenty of other uses for it, but that's probably the best. Please
+    let me know if and how you use this outside of it's purpose, I'm very
+    intrested :).
 
+PROPERTIES
+    At object instantiation (initilization) the following properties can be
+    set. Addtionally, they can be read/written in a standard hash way: print
+    $node->{'text'}.
 
-NNAAMMEE
-       Markup::Tree - Unified way to easily access XML or HTML markup locally
-       or remotly.
+    element_type
+        The type of element in question. Valid values follow:
 
-SSYYNNOOPPSSIISS
-               use Markup::Tree;
+        tag This is the default value and it represents a standard document
+            element.
 
-               my @preserve = qw(pre style script code);
+        -->text
+            TreeNodes of this element type represent textual objects.
 
-               my $tree = Markup::Tree->new ( markup => 'html', no_squash_whitespace => \@preserve,
-                                               no_indent => \@preserve );
+        -->declaration
+            In the real-world you'll probably have one or none of these. It
+            is the declaration that the XML or HTML tree has provided. Look
+            at the "text" property to see what the declaration was (intact
+            minus the <! >.
 
-               $tree->parse_file('http://lackluster.tzo.com:1024');
+        -->comment
+            This is a representation of comments in markup.
 
-               $tree->save_as('ltzo.com.xml', 'xml');
+        -->ignore
+            "element_types" marked with -->ignore will be overlooked (but
+            not children of -->ignore (unless they also are -->ignore)) by
+            Markup::Tree's "foreach_node" and "save_as" methods.
 
-               # or
+        -->pi
+            Processing Instruction. The "tagname" will be either "asp-style"
+            or "php-style" depending on wheter the tag was started and ended
+            with % or ?.
 
-               my $tree = Markup::Tree->new ( markup => 'xml', no_squash_whitespace => \@preserve,
-                                               no_indent => \@preserve );
+    tagname
+        For tag "element_type"s this is the name of the element.
 
-               $tree->parse_file('http://lackluster.tzo.com:1024/index.php.xml');
+        For -->pi "element_type"s this is either "asp-style" or "php-style"
+        depending on wheter the tag was started and ended with % or ?.
 
-               $tree->foreach_node(\&start, \&end);
+        For all other elements it is usually the same as "element_type".
 
-DDEESSCCRRIIPPTTIIOONN
-       I wanted a module to allow one to access either XML or HTML input,
-       locally or remotely, easily transform it, and save it as HTML or XML
-       (or some user-defined format). So I quit whining and wrote one. It's
-       not 100% finished, but it's a good start and the groundwork for the
-       "Markup::Content" module soon to be coming.
+    attr
+        A reference to an anonymous hash. This represents the elements
+        attributes in name => value pairs (a hash).
 
-CCOONNVVEENNTTIIOONNSS
-       I will be reopening certain terms to save myself keystrokes and you
-       confusion (or does that just create confusion?).
+    level
+        Internally this setting is never used. Markup::Tree uses it to
+        represent the depth or indentation level. You may find other uses
+        for it. Default value is 0.
 
-       FILE
-           When I mention FILE, what I really mean is either a local or
-           remotely mounted file "(i.e - /home/bprudent/this_xml_file.xml)",
-           an already opened filehandle, or a remote file location of which
-           LWP::Simple's get is capable of, well, getting.
+    parent
+        When present, this is the reference to the parent
+        "Markup::TreeNode". If empty the value of this property is
+        '(empty)'.
 
-           Note that if you pass an open filehandle to a method that wants to
-           read from it, you should open it for reading, and if the method
-           wants to write to it, you should open it for writing. Also, we can-
-           not write to a remote location (at least, the functionality does
-           not exist in this module to do so) so please don't pass a remote
-           location to a method that wants to write something (such as the
-           save_as method).
+    child_num
+        Internally this is used to represent which child number of our
+        parent we are. Again, you may find another use for it.
 
-AARRGGUUMMEENNTTSS
-       These are the arguments you can specify upon instantiation. In most
-       cases you can also set them yourself after you have an object of this
-       class via $tree->{'the_option'} = $whatever.
+    children
+        A reference to an anonymous array of "Markup::TreeNodes"s.
 
-       markup
-           Valid options are 'xml' or 'html'. This just specifies which parser
-           to use. I would like to, in the future, add more parsers to this
-           list. The default is 'html', which is much more forgiving.
+    text
+        The text of the object. Likely -->text or -->declaration will have
+        this set.
 
-       parser_options
-           This parameters requests an anonymous hash with parser-specific
-           options. If you specified 'xml' for markup then the
-           "parser_options" argument will be passed to XML::Parser.  Otherwise
-           it will go to HTML::Parser.
+METHODS
+    attach_parent ("Markup::TreeNode")
+        The safe way of assigning a parent. Adds the current node to the
+        last of the new parent's children list.
 
-       no_squash_whitespace
-           There are three modes to this argument:
+    attach_child ("Markup::TreeNode")
+        The safe way of assigning a child. Adds proper parent links and
+        "child_num"s.
 
-           mode 0
-               Squash all whitespace. This is the default mode.
+    attach_child_before ("Markup::TreeNode")
+        The safe way of assigning a child. Adds proper parent links and
+        "child_num"s.
 
-           mode 1
-               Set "no_squash_whitespace" to a true value to keep the tree as
-               close to the original document as possible.
+        The difference between this method and the "attach_child" method is
+        that this method will add the specified child as the first child of
+        it's children, rather than the last.
 
-           mode 2
-               Set "no_squash_whitespace" to an anonymous array containing
-               tagnames of which you want to preserve. This is handy when re-
-               creating or transforming HTML documents containing pre-format-
-               ted text, such as "script", "style", "pre", or, sometimes,
-               "code".
+    attach_children (ARRAYREF)
+        The safe way of assigning a children to a parent. Adds proper parent
+        links and "child_num"s.
 
-           Example:
+    get_text ( )
+        If the current object is a -->text object it simply returns its
+        text; Otherwise if the "next_node" is a text, returns its text. If
+        all fails, undef is returned.
 
-                   my $tree = Markup::Tree->new ( no_squash_whitespace => [qw(script style pre code)] );
+    next_node ( )
+        Returns the next "Markup::TreeNode" in the tree or undef if at the
+        bottom (or if the algo screwed up).
 
-       no_indent
-           It's all in the name. This value affects only (as of now) the
-           save_as method.  Again, there are three operating modes:
+    previous_node ( )
+        Returns the previous "Markup::TreeNode" in the tree or undef if at
+        the top (or if the algo screwed up).
 
-           mode 0
-               Leave indentation on. This is the default mode.
+    drop ( )
+        Drops (deletes) the current node and all of its children. Returns
+        the dropped node.
 
-           mode 1
-               Setting "no_indent" to a true value will never indent.
+    replace ("Markup::TreeNode")
+        Replaces the current node with the specified one. Returns the
+        replaced node.
 
-           mode 2
-               Set "no_indent" to an anonymous array containing tagnames of
-               which you want to not indent.  This is normally the same value
-               as no_squash_whitespace.
+    insert ("Markup::TreeNode", position)
+        Arguments:
 
-MMEETTHHOODDSS
-       parse_file (FILE)
-           Arguments:
+        "Markup::TreeNode"
+            The node you want to insert
 
-           FILE to be parsed
+        position
+            May be one of 'before' or 'after'. The default is 'after'.
 
-           Example:
+        This method will insert the specified node either before or after
+        itself, depending on the "position".
 
-                   $tree->parse_file ('http://lackluster.tzo.com:1024');
-                   # or
-                   $tree->parse_file (\*INPUT);
-                   # or
-                   $tree->parse_file ('/home/lackluster/public_html/index.html');
+BUGS
+    Please let me know if you find any bugs.
 
-           This method does not return anything.
+SEE ALSO
+    Markup::Tree
 
-           Note that this will close the file(handle).
+AUTHOR
+    BPrudent (Brandon Prudent)
 
-       parse (DATA)
-           Just the same as HTML or XML ::Parse's parse method. Pass in markup
-           data.  For HTML you will need to call _e_o_f_(_).
+    Email: xlacklusterx@hotmail.com
 
-       eof ( )
-           Signals the end of HTML markup. Calling eof on XML data will not
-           generate an error, it just won't do anything.
-
-       save_as (FILE [, type])
-           Saves the tree to FILE as type, if specified.
-
-           Arguments:
-
-           FILE
-               This is the filename or handle to write the information in. If
-               this argument is textual, the method will try to guess, based
-               on the file extension, the second argument if not present.
-
-           type
-               Valid values are 'html' or 'xml'. Will also accept 'xhtml'.
-               Default is 'html'.
-
-           Example:      $tree->save_as ('/home/lackluster/public_html/trans-
-           formed.html.xml', 'xml');
-
-       foreach_node (start_CODE [, end_CODE] [, start_from])
-           Loops through each node in the syntax tree, calling "start_CODE"
-           and, if present, end_CODE. This method makes looping through the
-           tree really quite simple and lends itself well to saving files to
-           your own format.
-
-           Arguments:
-
-           start_CODE
-               This CODE ref will be called when a node is encounted and
-               before its children have been processed. A Markup::TreeNode
-               element will be passed to your sub.
-
-           end_CODE
-               If this parameter is present, then the CODE ref will be called
-               after a node is encountered and after its children have been
-               processed. If end_CODE is not a CODE ref, but instead a
-               Markup::TreeNode, the method will interpret "end_CODE" as
-               "start_from".
-
-           start_from
-               Instead of looping over the whole tree, this value can be a
-               Markup::TreeNode start point. (See "BUGS" section)
-
-               Example:      $tree->foreach_node(           sub {
-                              my $node = _s_h_i_f_t_(_);
-                              indent($node->{'level'});                print
-               $node->{'tagname'}."\n";           },           sub {
-                              my $node = _s_h_i_f_t_(_);
-                              indent($node->{'level'});                print
-               $node->{'tagname'}."\n";           }      );
-
-           RREETTUURRNN VVAALLUUEESS MMAATTTTEERR!!
-
-           Returning a false value will end the iterations and cause the
-           method to return.  Return true to keep processing.
-
-CCAAVVEEAATTSS
-       This module isn't really the best for people who don't often use
-       markup. It requires quite a few modules (I actually feed bad about the
-       module requirements), and HTML or XML ::Parser is probably a better
-       choice for most things you want to do. On the upside, if you already
-       have these modules, it is a comparativly easy way to use markup.
-
-BBUUGGSS |||| UUNNFFIINNIISSHHEEDD
-       "Wide character in print" warnings are abound. I haven't taken the time
-       to look into this.  Something about UNICODE?
-
-       The "foreach_node" method doesn't behave properly when passed the
-       start_from parameter.  That's what I thought, at least. The behaviour
-       may work for you in your situation. Just know that it may change in the
-       future unless anyone requests otherwise.
-
-       The "save_as" method discards declarations and comments. That will be
-       fixed soon.
-
-       Processing instructions are not built into the tree. This will be fixed
-       probably in the next release.
-
-       Please inform me of other bugs.
-
-SSEEEE AALLSSOO
-       Markup::TreeNode, XML::Parser, HTML::Parser, LWP::Simple
-
-AAUUTTHHOORR
-       BPrudent (Brandon Prudent)
-
-       Email: xlacklusterx@hotmail.com
-
-
-
-perl v5.8.0                       2003-11-07                   Markup::Tree(3)

@@ -1,10 +1,10 @@
 package Markup::TreeNode;
-$VERSION = '1.0.0';
+$VERSION = '1.1.0';
 
 use strict;
+use Carp;
 
 require Exporter;
-require Carp;
 
 our @ISA = qw(Exporter);
 our $empty = '(empty)';
@@ -47,7 +47,7 @@ sub init {
 			$self->{$_} = $args{$_};
 		}
 		else {
-			Carp::croak ("unrecognized node option $_");
+			croak ("unrecognized node option $_");
 		}
 	}
 }
@@ -71,6 +71,22 @@ sub attach_child {
 	$child->{'parent'} = $self;
 	$child->{'child_num'} = $child_count;
 }
+
+sub attach_child_before {
+	my ($self, $child) = @_;
+	my $child_count = scalar(@{ $self->{'children'} });
+
+	for (my $i = 0; $i < $child_count; $i++) {
+		$self->{'children'}->[($i + 1)] = $self->{'children'}->[$i];
+		$self->{'children'}->[($i + 1)]->{'child_num'}++;
+	}
+
+	$self->{'children'}->[0] = $child;
+	# if setting child, add us as parent of child
+	$child->{'parent'} = $self;
+	$child->{'child_num'} = 0;
+}
+
 
 sub attach_children {
 	my ($self, $childref) = @_;
@@ -116,24 +132,23 @@ sub next_node {
 	return ($recurse->($recurse, $self));
 }
 
-# still b0rked!
+# fixed!
 sub previous_node {
 	my $self = shift();
 
-	my $recurse = sub {
-		my ($me, $myself) = @_;
-		if ($myself->{'parent'} ne $empty) {
-			if ($myself->{'child_num'} < (scalar(@{ $myself->{'parent'}->{'children'} }) - 1)) {
-				return ($myself->{'parent'}->{'children'}->[($myself->{'child_num'} - 1)]);
+	if ($self->{'parent'} ne $empty) {
+		if (($self->{'child_num'} > 0) && (scalar(@{ $self->{'parent'}->{'children'} }) >= 1)) {
+			my $ret = $self->{'parent'}->{'children'}->[($self->{'child_num'} - 1)];
+			while (scalar(@{$ret->{'children'} || []})) {
+				$ret = $ret->{'children'}->[(scalar(@{$ret->{'children'}}) - 1)];
 			}
-
-			return ($me->($me, $myself->{'parent'}));
+			return ($ret);
 		}
 
-		return undef;
-	};
+		return ($self->{'parent'});
+	}
 
-	return ($recurse->($recurse, $self));
+	return undef;
 }
 
 sub drop {
@@ -151,6 +166,39 @@ sub drop {
 	$self->{'children'} = undef;
 
 	return ($ret);
+}
+
+sub replace {
+	my ($self, $node) = @_;
+
+	if (!UNIVERSAL::isa($node, 'Markup::TreeNode')) {
+		croak ("Node is not a Markup::TreeNode");
+	}
+
+	$self->insert($node, 'after');
+	return ($self->drop());
+}
+
+sub insert {
+	my ($self, $node, $position) = @_;
+	$position = 'after' if (!$position);
+
+	if (($position ne 'after') && ($position ne 'before')) {
+		croak ("Unknown position $position");
+	}
+
+	if (!UNIVERSAL::isa($node, 'Markup::TreeNode')) {
+		croak ("Node is not a Markup::TreeNode");
+	}
+
+	if ($position eq 'after') {
+		$self->{'parent'}->attach_child($node);
+	}
+	else {
+		$self->{'parent'}->attach_child_before($node);
+	}
+
+	return ($node);
 }
 
 1;
@@ -175,7 +223,7 @@ I'm very intrested :).
 =head1 PROPERTIES
 
 At object instantiation (initilization) the following properties can be set.
-Addtionally, they can be read/written in a standard hash way: C<print $node->{'text'}>.
+Addtionally, they can be read/written in a standard hash way: print $node->{'text'}.
 
 =over 4
 
@@ -272,6 +320,14 @@ the new parent's children list.
 
 The safe way of assigning a child. Adds proper parent links and C<child_num>s.
 
+=item attach_child_before (C<Markup::TreeNode>)
+
+The safe way of assigning a child. Adds proper parent links and C<child_num>s.
+
+The difference between this method and the C<attach_child> method is that this
+method will add the specified child as the B<first> child of it's children,
+rather than the B<last>.
+
 =item attach_children (ARRAYREF)
 
 The safe way of assigning a children to a parent. Adds proper parent links and C<child_num>s.
@@ -289,19 +345,39 @@ Returns the next C<Markup::TreeNode> in the tree or undef if at the bottom
 =item previous_node ( )
 
 Returns the previous C<Markup::TreeNode> in the tree or undef if at the top
-(or if the algo screwed up - it is in this case).
+(or if the algo screwed up).
 
 =item drop ( )
 
 Drops (deletes) the current node and all of its children. Returns the dropped node.
 
+=item replace (C<Markup::TreeNode>)
+
+Replaces the current node with the specified one. Returns the replaced node.
+
+=item insert (C<Markup::TreeNode>, position)
+
+Arguments:
+
+=over 4
+
+=item C<Markup::TreeNode>
+
+The node you want to insert
+
+=item position
+
+May be one of 'before' or 'after'. The default is 'after'.
+
+=back
+
+This method will insert the specified node either before or after itself, depending on the C<position>.
+
 =back
 
 =head1 BUGS
 
-The C<previous_node> method is screwy X^(
-
-Please let me know of other bugs.
+Please let me know if you find any bugs.
 
 =head1 SEE ALSO
 
