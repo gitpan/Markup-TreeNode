@@ -1,5 +1,12 @@
 package Markup::TreeNode;
-$VERSION = '1.1.0';
+$VERSION = '1.1.6';
+
+####################################################
+# This module is protected under the terms of the
+# GNU GPL. Please see
+# http://www.opensource.org/licenses/gpl-license.php
+# for more information.
+####################################################
 
 use strict;
 use Carp;
@@ -21,7 +28,7 @@ sub new {
 		child_num	=> 0,
 		children	=> [ ],
 		text		=> ''
-	}, 'Markup::TreeNode';
+	}, $class;
 	$class->init (@_);
 	return $class;
 }
@@ -38,7 +45,7 @@ sub init {
 		}
 
 		# enforce integrity
-		if ($_ eq 'children') {
+		if ($_ eq 'children' && scalar(@{$args{$_}})) {
 			$self->attach_children($args{$_});
 			next;
 		}
@@ -60,6 +67,8 @@ sub attach_parent {
 	my $child_count = scalar(@{$self->{'parent'}->{'children'} || []});
 	$self->{'parent'}->{'children'}->[$child_count] = $self;
 	$self->{'child_num'} = $child_count;
+
+	return $self;
 }
 
 sub attach_child {
@@ -70,6 +79,8 @@ sub attach_child {
 	# if setting child, add us as parent of child
 	$child->{'parent'} = $self;
 	$child->{'child_num'} = $child_count;
+
+	return $self;
 }
 
 sub attach_child_before {
@@ -85,18 +96,27 @@ sub attach_child_before {
 	# if setting child, add us as parent of child
 	$child->{'parent'} = $self;
 	$child->{'child_num'} = 0;
+
+	return $self;
 }
 
 
 sub attach_children {
 	my ($self, $childref) = @_;
+	my $cnt = 0;
 
 	$self->{'children'} = $childref;
 	# if setting children, add us as parent of all children
-	foreach (@{$self->{'parent'}->{'children'}}) {
+	foreach (@{ $self->{'children'} }) {
+		if (!UNIVERSAL::isa($_, 'Markup::TreeNode')) {
+			croak ("$_ is not a recognized child");
+		}
+
 		$_->{'parent'} = $self;
-		$_->{'child_count'} = scalar(@{$_->{'parent'}->{'children'}});
+		$_->{'child_num'} = $cnt++;
 	}
+
+	return $self;
 }
 
 sub get_text {
@@ -119,7 +139,7 @@ sub next_node {
 	my $recurse = sub {
 		my ($me, $myself) = @_;
 		if ($myself->{'parent'} ne $empty) {
-			if ($myself->{'child_num'} < (scalar(@{ $myself->{'parent'}->{'children'} }) - 1)) {
+			if ($myself->{'child_num'} < (scalar(@{ $myself->{'parent'}->{'children'} || [] }) - 1)) {
 				return ($myself->{'parent'}->{'children'}->[($myself->{'child_num'} + 1)]);
 			}
 
@@ -132,7 +152,6 @@ sub next_node {
 	return ($recurse->($recurse, $self));
 }
 
-# fixed!
 sub previous_node {
 	my $self = shift();
 
@@ -153,19 +172,21 @@ sub previous_node {
 
 sub drop {
 	my $self = shift();
-	my $ret = $self->{'parent'};
+	my $parent = $self->{'parent'};
 
-	splice @{ $self->{'parent'}->{'children'} || [] }, $self->{'child_num'}, 1;
+	return ($self) if ($parent eq $empty);
 
-	if ($self->{'child_num'} < scalar(@{ $self->{'parent'}->{'children'} })) {
-		$ret = $self->{'parent'}->{'children'}->[$self->{'child_num'}];
+	splice @{ $parent->{'children'} }, $self->{'child_num'}--, 1;
+
+	if ($self->{'child_num'} < (scalar(@{ $parent->{'children'} || [] })) && $self->{'child_num'} > 0) {
+		for (my $i = $self->{'child_num'}; $i < scalar(@{ $parent->{'children'} }); $i++) {
+			$parent->{'children'}->[$i]->{'child_num'} = $i;
+		}
 	}
 
-	foreach (@{ $self->{'children'} || [] }) { $_->drop(); };
-	$self->{'parent'} = undef;
-	$self->{'children'} = undef;
+	$self->{'parent'} = $empty;
 
-	return ($ret);
+	return ($self);
 }
 
 sub replace {
@@ -182,23 +203,55 @@ sub replace {
 sub insert {
 	my ($self, $node, $position) = @_;
 	$position = 'after' if (!$position);
+	my $child_num;
 
 	if (($position ne 'after') && ($position ne 'before')) {
-		croak ("Unknown position $position");
+		croak ("Unknown position '$position'");
 	}
 
 	if (!UNIVERSAL::isa($node, 'Markup::TreeNode')) {
 		croak ("Node is not a Markup::TreeNode");
 	}
 
-	if ($position eq 'after') {
-		$self->{'parent'}->attach_child($node);
-	}
-	else {
-		$self->{'parent'}->attach_child_before($node);
+	$child_num = $self->{'child_num'} + ($position eq 'after'); # yes, I know what that means :)
+	$child_num = 0 if ($child_num < 0);
+
+	if ($self->{'parent'} eq $empty) {
+		return ($self->attach_child($node));
 	}
 
-	return ($node);
+	for ($self->{'parent'}->{'children'}) {
+		my $oglen = scalar(@{ $_ });
+		for (my $i = $oglen; $i >= $child_num; $i--) {
+			$_->[($i + 1)] = $_->[$i];
+			$_->[($i + 1)]->{'child_num'}++;
+		}
+
+		splice (@{$_}, ++$oglen);
+
+		$_->[$child_num] = $node;
+		$_->[$child_num]->{'parent'} = $self->{'parent'};
+		$_->[$child_num]->{'child_num'} = $child_num;
+		return ($_->[$child_num]);
+	}
+}
+
+sub copy_of {
+	my $self = shift();
+	my ($newbie => %options); # if you don't know you betta' axe somebody!
+
+	foreach (keys %{ $self }) {
+		$options{$_} = $self->{$_};
+	}
+
+	for ($self->{'children'}) {
+		my $a = scalar(@{$_});
+		for (my $i = 0; $i < $a; $i++) {
+			$options{'children'}->[$i] = $_->[$i]->copy_of();
+		}
+	}
+
+	return ($self->new(%options));
 }
 
 1;
@@ -263,6 +316,47 @@ by L<Markup::Tree>'s C<foreach_node> and C<save_as> methods.
 Processing Instruction. The C<tagname> will be either
 C<asp-style> or C<php-style> depending on wheter the
 tag was started and ended with % or ?.
+
+Because it would disturb the natural flow of things later,
+pis are treated differently when they are found within quotes,
+as in an attribute. Instead of thier normal tagging, <pi language="style"></pi>
+they are instead represented in the following format:
+{pi:language=style:the pi information found}.
+
+Example:
+
+	<p>some text</p>
+	<?php print "<p>some more text</p>"; ?>
+
+becomes
+
+	<p>
+		some text
+	</p>
+	<pi language = "php-style">
+		print "<p>some more text</p>";
+	</pi>
+
+whereas
+
+	<p class = "<?=print "classname";?>">some text</p>
+
+becomes
+
+	<p class = "{pi:language=php-style:=print %QUOTE%classname%QUOTE%;}">
+		some text
+	</p>
+
+Make sense?
+
+=item -->section
+
+Indicates a marked section. The tagname is the
+name of the section. In the future you
+will be able to use this section to get different
+object of a marked-up page. $tree->get_section('navigation')
+or something like that. Currently used only by the
+C<Markup::Match*> modules.
 
 =back
 
@@ -372,6 +466,13 @@ May be one of 'before' or 'after'. The default is 'after'.
 =back
 
 This method will insert the specified node either before or after itself, depending on the C<position>.
+
+=item copy_of
+
+Returns a B<copy> of the current node. This means you can safely modify
+the returned node without affecting the original node or node tree. All
+references to children or are also copies, but refrences to parents are,
+in fact, refrences.
 
 =back
 

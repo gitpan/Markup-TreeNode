@@ -7,4 +7,4 @@ WriteMakefile (ABSTRACT => 'Markup::TreeNode - Represents nodes on the Markup::T
 	       DISTNAME => 'Markup',
 	       NAME => 'Markup::TreeNode',
 	       INSTALLMAN3DIR => 'none',
-	       VERSION => '1.1.0');
+	       VERSION => v1.1.6);

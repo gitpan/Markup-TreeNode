@@ -41,6 +41,45 @@ PROPERTIES
             or "php-style" depending on wheter the tag was started and ended
             with % or ?.
 
+            Because it would disturb the natural flow of things later, pis
+            are treated differently when they are found within quotes, as in
+            an attribute. Instead of thier normal tagging, <pi
+            language="style"></pi> they are instead represented in the
+            following format: {pi:language=style:the pi information found}.
+
+            Example:
+
+                    <p>some text</p>
+                    <?php print "<p>some more text</p>"; ?>
+
+            becomes
+
+                    <p>
+                            some text
+                    </p>
+                    <pi language = "php-style">
+                            print "<p>some more text</p>";
+                    </pi>
+
+            whereas
+
+                    <p class = "<?=print "classname";?>">some text</p>
+
+            becomes
+
+                    <p class = "{pi:language=php-style:=print %QUOTE%classname%QUOTE%;}">
+                            some text
+                    </p>
+
+            Make sense?
+
+        -->section
+            Indicates a marked section. The tagname is the name of the
+            section. In the future you will be able to use this section to
+            get different object of a marked-up page.
+            $tree->get_section('navigation') or something like that.
+            Currently used only by the "Markup::Match*" modules.
+
     tagname
         For tag "element_type"s this is the name of the element.
 
@@ -127,6 +166,12 @@ METHODS
 
         This method will insert the specified node either before or after
         itself, depending on the "position".
+
+    copy_of
+        Returns a copy of the current node. This means you can safely modify
+        the returned node without affecting the original node or node tree.
+        All references to children or are also copies, but refrences to
+        parents are, in fact, refrences.
 
 BUGS
     Please let me know if you find any bugs.
